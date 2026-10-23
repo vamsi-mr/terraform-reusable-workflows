@@ -51,7 +51,7 @@ jobs:
       - name: Validate
         run: terraform validate
 
-      - name: Plan
+      - name: Planning
         run: terraform plan
       
         
