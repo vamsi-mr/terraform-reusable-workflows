@@ -69,6 +69,9 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+      - name: Show Terraform Plan
+        run: terraform show -no-color tfplan
+
   apply:
     name: Terraform Apply
     runs-on: ubuntu-latest
