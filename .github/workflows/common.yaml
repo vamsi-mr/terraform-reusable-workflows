@@ -1,27 +1,34 @@
+
 name: Reusable-Workflow
+
 on:
   workflow_call:
-      inputs:
-          working_directory:
-            description: 'The working directory for the Terraform configuration'
-            required: true
-            type: string
-            #default: "."
-          terraform_version:
-            description: Terraform CLI version supplied by the caller
-            required: true
-            type: string
-          aws_role_to_assume:
-            description: AWS IAM role ARN to assume using GitHub OIDC
-            required: true
-            type: string
-          aws_region:
-            description: AWS region for credentials
-            required: false
-            type: string
-            #default: us-east-1
+    inputs:
+      working_directory:
+        description: 'The working directory for the Terraform configuration'
+        required: true
+        type: string
+
+      terraform_version:
+        description: Terraform CLI version supplied by the caller
+        required: true
+        type: string
+
+      aws_role_to_assume:
+        description: AWS IAM role ARN to assume using GitHub OIDC
+        required: true
+        type: string
+
+      aws_region:
+        description: AWS region for credentials
+        required: false
+        type: string
+        #default: us-east-1
+
 jobs:
+
   plan:
+    name: Terraform Plan
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -29,12 +36,12 @@ jobs:
     defaults:
       run:
         working-directory: ${{ inputs.working_directory }}
-    steps:
 
-      - name: checkout code
+    steps:
+      - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: set up terraform
+      - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ inputs.terraform_version }}
@@ -45,19 +52,59 @@ jobs:
           role-to-assume: ${{ inputs.aws_role_to_assume }}
           aws-region: ${{ inputs.aws_region }}
 
-      - name: Initialize
+      - name: Terraform Init
         run: terraform init
 
-      - name: Validate
+      - name: Terraform Validate
         run: terraform validate
 
-      - name: Planning
-        run: terraform plan
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan
 
-      - name: Applying
-        run: terraform apply -auto-approve
+      - name: Upload Terraform Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan
+          path: ${{ inputs.working_directory }}/tfplan
+          retention-days: 1
+          if-no-files-found: error
 
-      - name: Destroying
-        run: terraform destroy -auto-approve
+  apply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    needs: plan
+    # Approval is controlled by this GitHub Environment.
+    environment: production
+    permissions:
+      id-token: write
+      contents: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
 
-        
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.aws_role_to_assume }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Download Terraform Plan
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-plan
+          path: ${{ inputs.working_directory }}
+
+      - name: Apply Approved Plan
+        run: terraform apply -auto-approve tfplan
